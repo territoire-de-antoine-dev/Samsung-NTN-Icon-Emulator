@@ -55,6 +55,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
     private static Context systemContext;
     private static VisualConfig config = new VisualConfig();
     private static boolean registered;
+    private static boolean receivedUiConfig;
     private static boolean signaturesLogged;
     private static boolean errorLogged;
     private static boolean injectionCauseLogged;
@@ -150,7 +151,15 @@ public final class ModuleHook implements IXposedHookLoadPackage {
         config = read(ctx);
         BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
-                config = read(context);
+                if (intent != null && intent.hasExtra("enabled")) {
+                    // Direct in-memory settings avoid boot-time provider lookup failures.
+                    config = VisualConfig.fromBundle(intent.getExtras());
+                    receivedUiConfig = true;
+                    XposedBridge.log(TAG + "CONFIG_BROADCAST enabled=" + config.enabled
+                        + " level=" + config.level + " mode=" + config.mode);
+                } else {
+                    config = read(context);
+                }
                 scheduleOnMain(ModuleHook::refresh, 0);
             }
         };
@@ -162,9 +171,11 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             XposedBridge.log(TAG + "settings listener ready");
             // Samsung sometimes registers our settings provider after SystemUI starts.
             scheduleOnMain(() -> {
-                config = read(ctx);
-                XposedBridge.log(TAG + "CONFIG_BOOT_RETRY enabled=" + config.enabled);
-                if (config.enabled) refresh();
+                if (!receivedUiConfig) {
+                    config = read(ctx);
+                    XposedBridge.log(TAG + "CONFIG_BOOT_RETRY enabled=" + config.enabled);
+                    if (config.enabled) refresh();
+                }
             }, 4500);
         } catch (Throwable err) {
             XposedBridge.log(TAG + "receiver registration failed: " + err);
