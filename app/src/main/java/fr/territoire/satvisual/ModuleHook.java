@@ -575,12 +575,91 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                 Class<?>[] p = ctor.getParameterTypes();
                 if (p.length == 1 && p[0].isAssignableFrom(iconType)) {
                     ctor.setAccessible(true);
-                    return ctor.newInstance(stockIcon);
+                    Object candidate = ctor.newInstance(stockIcon);
+                    XposedBridge.log(TAG + "HOLDER_CREATED_BY_ICON_CTOR");
+                    return candidate;
                 }
             }
+
+            // Samsung can strip or rename the static fromIcon factory.
+            // AOSP StatusBarIconHolder has a private no-arg constructor and
+            // a setIcon(StatusBarIcon) method (or mIcon/icon field). Recreate
+            // only this new holder; do not borrow or modify real system holders.
+            for (Constructor<?> ctor : holderClass.getDeclaredConstructors()) {
+                if (ctor.getParameterTypes().length != 0) continue;
+                try {
+                    ctor.setAccessible(true);
+                    Object candidate = ctor.newInstance();
+                    boolean assigned = false;
+
+                    for (Class<?> scan = holderClass; scan != null && !assigned;
+                         scan = scan.getSuperclass()) {
+                        for (Method setter : scan.getDeclaredMethods()) {
+                            Class<?>[] args = setter.getParameterTypes();
+                            if (setter.getName().equals("setIcon") && args.length == 1
+                                && args[0].isAssignableFrom(iconType)) {
+                                setter.setAccessible(true);
+                                setter.invoke(candidate, stockIcon);
+                                assigned = true;
+                                XposedBridge.log(TAG + "HOLDER_ICON_SET_BY_METHOD "
+                                    + setter.toGenericString());
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!assigned) {
+                        for (Class<?> scan = holderClass; scan != null && !assigned;
+                             scan = scan.getSuperclass()) {
+                            for (Field field : scan.getDeclaredFields()) {
+                                if (("mIcon".equals(field.getName())
+                                    || "icon".equals(field.getName()))
+                                    && field.getType().isAssignableFrom(iconType)
+                                    && !Modifier.isStatic(field.getModifiers())) {
+                                    field.setAccessible(true);
+                                    field.set(candidate, stockIcon);
+                                    assigned = true;
+                                    XposedBridge.log(TAG + "HOLDER_ICON_SET_BY_FIELD "
+                                        + field.getName());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!assigned) continue;
+
+                    Method getIcon = exactMethod(holderClass, "getIcon");
+                    if (getIcon != null && getIcon.invoke(candidate) != stockIcon) {
+                        XposedBridge.log(TAG + "HOLDER_ICON_VERIFICATION_FAILED");
+                        continue;
+                    }
+                    Method getType = exactMethod(holderClass, "getType");
+                    if (getType != null) {
+                        Object typeValue = getType.invoke(candidate);
+                        if (!(typeValue instanceof Number)
+                            || ((Number) typeValue).intValue() != 0) {
+                            XposedBridge.log(TAG + "HOLDER_WRONG_TYPE " + typeValue);
+                            continue;
+                        }
+                    }
+                    XposedBridge.log(TAG + "HOLDER_CREATED_BY_ZERO_ARG_CTOR");
+                    return candidate;
+                } catch (Throwable fallbackError) {
+                    XposedBridge.log(TAG + "HOLDER_ZERO_ARG_FAILED " + fallbackError);
+                }
+            }
+
+            for (Constructor<?> constructor : holderClass.getDeclaredConstructors())
+                XposedBridge.log(TAG + "HOLDER_CTOR " + constructor.toGenericString());
             for (Method factory : holderClass.getDeclaredMethods()) {
-                if (factory.getName().toLowerCase().contains("icon"))
+                String methodName = factory.getName().toLowerCase();
+                if (methodName.contains("icon") || methodName.contains("holder"))
                     XposedBridge.log(TAG + "HOLDER_FACTORY " + factory.toGenericString());
+            }
+            for (Field field : holderClass.getDeclaredFields()) {
+                if (field.getName().toLowerCase().contains("icon"))
+                    XposedBridge.log(TAG + "HOLDER_FIELD " + field.toGenericString());
             }
             logOnce("STATUS_BAR_ICON_HOLDER_FACTORY_UNAVAILABLE");
         } catch (Throwable err) {
