@@ -5,6 +5,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.drawable.Icon;
+import android.os.UserHandle;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,6 +14,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -49,6 +52,8 @@ public final class ModuleHook implements IXposedHookLoadPackage {
     private static Context systemContext;
     private static VisualConfig config = new VisualConfig();
     private static boolean registered;
+    private static boolean signaturesLogged;
+    private static boolean errorLogged;
     private static boolean busy;
     private static boolean injected;
     private static int lastRes;
@@ -68,6 +73,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                 if (clazz == null) continue;
                 found++;
                 XposedBridge.log(TAG + "controller found " + name);
+                printCandidateSignatures(clazz);
 
                 XposedBridge.hookAllConstructors(clazz, new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam p) {
@@ -195,9 +201,34 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             }
 
             try {
-                // True SystemUI-owned icon slot: unlike V1, this does not use ViewOverlay.
-                XposedHelpers.callMethod(controller, "setIcon", SLOT, res,
-                        (CharSequence) "Satellite (simulation visuelle, aucune connexion réelle)");
+                // The three-argument AOSP setIcon signature is NOT present on this Samsung build.
+                // Discover an actually supported signature before invoking anything.
+                Method selected = findCompatibleSetIcon(controller.getClass());
+                if (selected == null) {
+                    logOnce("NO_COMPATIBLE_SETICON_SIGNATURE: consult METHOD lines from this build.");
+                    return;
+                }
+                Class<?>[] p = selected.getParameterTypes();
+                Object[] args;
+                if (p.length == 3) {
+                    args = new Object[]{SLOT, res,
+                        (CharSequence) "Satellite SIMULÉ : aucune connexion réelle"};
+                } else {
+                    Object stockIcon = createNativeStatusBarIcon(p[1], ctx, res);
+                    if (stockIcon == null) {
+                        logOnce("NO_COMPATIBLE_STATUSBARICON_CONSTRUCTOR: method=" + selected);
+                        return;
+                    }
+                    args = new Object[]{SLOT, stockIcon};
+                }
+                // Do not overwrite an existing modern/bindable satellite icon slot:
+                // it may carry a genuine status (including emergency connectivity).
+                if (isManagedByModernPipeline(controller)) {
+                    logOnce("SATELLITE_SLOT_IS_MODERN_BINDABLE: native icon is owned by pipeline; leaving it untouched");
+                    return;
+                }
+                selected.setAccessible(true);
+                selected.invoke(controller, args);
                 try {
                     XposedHelpers.callMethod(controller, "setIconVisibility", SLOT, true);
                 } catch (Throwable ignored) {
@@ -208,10 +239,9 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                 lastRes = res;
                 injected = true;
                 XposedBridge.log(TAG + "INJECTED_NATIVE_ICON slot=" + SLOT
-                        + " drawable=" + ctx.getResources().getResourceEntryName(res)
-                        + " level=" + config.level);
+                    + " method=" + selected + " level=" + config.level);
             } catch (Throwable error) {
-                XposedBridge.log(TAG + "setIcon unsupported on this Samsung SystemUI: " + error);
+                logOnce("NATIVE_INJECTION_FAILED " + error);
             }
         } catch (Throwable ex) {
             XposedBridge.log(TAG + "apply failed safely: " + ex);
@@ -234,6 +264,85 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             } catch (Throwable err) {
                 XposedBridge.log(TAG + "native icon removal failed: " + err);
             }
+        }
+    }
+
+    private static void logOnce(String warning) {
+        if (errorLogged) return;
+        errorLogged = true;
+        XposedBridge.log(TAG + warning);
+    }
+
+    private static void printCandidateSignatures(Class<?> cls) {
+        if (signaturesLogged) return;
+        signaturesLogged = true;
+        int n = 0;
+        for (Class<?> scan = cls; scan != null; scan = scan.getSuperclass()) {
+            try {
+                for (Method m : scan.getDeclaredMethods()) {
+                    String name = m.getName();
+                    if (name.equals("setIcon") || name.equals("setIconVisibility")
+                        || name.equals("setIconFromTile") || name.equals("addBindableIcon")
+                        || name.equals("refreshIconGroups") || name.equals("getIconHolder")
+                        || name.equals("hideBySimplification")) {
+                        XposedBridge.log(TAG + "METHOD " + m.toGenericString());
+                        n++;
+                        if (n >= 45) return;
+                    }
+                }
+            } catch (Throwable e) {
+                XposedBridge.log(TAG + "signature inspection failed: " + e);
+            }
+        }
+        XposedBridge.log(TAG + "METHOD_COUNT " + n);
+    }
+
+    private static Method findCompatibleSetIcon(Class<?> cls) {
+        Method twoArg = null;
+        for (Class<?> scan = cls; scan != null; scan = scan.getSuperclass()) {
+            for (Method m : scan.getDeclaredMethods()) {
+                if (!m.getName().equals("setIcon")) continue;
+                Class<?>[] p = m.getParameterTypes();
+                if (p.length == 3 && p[0] == String.class
+                    && (p[1] == int.class || p[1] == Integer.class)
+                    && CharSequence.class.isAssignableFrom(p[2])) {
+                    return m;
+                }
+                if (p.length == 2 && p[0] == String.class
+                    && p[1].getName().equals("com.android.internal.statusbar.StatusBarIcon")) {
+                    twoArg = m;
+                }
+            }
+        }
+        return twoArg;
+    }
+
+    private static Object createNativeStatusBarIcon(Class<?> type, Context ctx, int drawable) {
+        try {
+            Icon icon = Icon.createWithResource(ctx, drawable);
+            for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+                Class<?>[] p = constructor.getParameterTypes();
+                if (p.length == 6 && p[0] == UserHandle.class && p[1] == String.class
+                    && p[2] == Icon.class && p[3] == int.class && p[4] == int.class
+                    && CharSequence.class.isAssignableFrom(p[5])) {
+                    constructor.setAccessible(true);
+                    return constructor.newInstance(UserHandle.of(0), ctx.getPackageName(),
+                        icon, 0, 0, (CharSequence) "Satellite SIMULÉ : aucune connexion réelle");
+                }
+            }
+        } catch (Throwable ex) {
+            XposedBridge.log(TAG + "StatusBarIcon construction error: " + ex);
+        }
+        return null;
+    }
+
+    private static boolean isManagedByModernPipeline(Object controller) {
+        try {
+            Object holder = XposedHelpers.callMethod(controller, "getIconHolder", SLOT, 0);
+            return holder != null && holder.getClass().getName().toLowerCase().contains("bindable");
+        } catch (Throwable ignored) {
+            // Unknown Samsung implementation: we don't claim this is a guarantee.
+            return false;
         }
     }
 
