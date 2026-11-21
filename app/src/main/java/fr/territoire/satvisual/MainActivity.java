@@ -65,25 +65,24 @@ public final class MainActivity extends Activity {
         scroller.addView(page);
         setContentView(scroller);
 
-        page.addView(label("SATELLITE NTN",27,true));
-        TextView kicker = label("SAMSUNG SYSTEMUI  •  ICÔNE NATIVE  •  V2.1.1",12,false);
+        page.addView(label(getString(R.string.title),27,true));
+        TextView kicker = label(getString(R.string.kicker),12,false);
         kicker.setTextColor(Color.rgb(102,195,239));
         page.addView(kicker);
         gap(page,20);
 
         TextView explanation = label(
-            "Cette version crée un emplacement visuel indépendant dans la barre d'état Samsung. "
-            + "Elle utilise le dessin satellite natif, sans simuler de connexion réseau.",16,false);
+            getString(R.string.explanation),16,false);
         explanation.setTextColor(Color.rgb(207,223,235));
         page.addView(explanation);
         gap(page,14);
-        TextView warning=label("SIMULATION VISUELLE UNIQUEMENT\nAUCUN ACCÈS RÉEL À STARLINK / T-SATELLITE / SOS",12,true);
+        TextView warning=label(getString(R.string.warning),12,true);
         warning.setTextColor(Color.rgb(255,193,108));
         page.addView(warning);
         gap(page,25);
 
         Switch toggle=new Switch(this);
-        toggle.setText("Afficher l'icône satellite simulée");
+        toggle.setText(R.string.toggle);
         toggle.setTextSize(16);
         toggle.setTextColor(Color.WHITE);
         toggle.setChecked(cfg.enabled);
@@ -94,14 +93,9 @@ public final class MainActivity extends Activity {
         page.addView(toggle);
 
         gap(page,23);
-        page.addView(label("Profil (étiquette de simulation)",15,true));
+        page.addView(label(getString(R.string.profile_label),15,true));
         Spinner modes=new Spinner(this);
-        String[] names = {
-            "Satellite NTN connecté (fictif)",
-            "Satellite SOS (fictif)",
-            "T-Satellite / Starlink (fictif)",
-            "Recherche de satellite (fictive)"
-        };
+        String[] names = getResources().getStringArray(R.array.simulation_modes);
         modes.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names));
         modes.setSelection(cfg.mode);
         modes.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
@@ -113,13 +107,13 @@ public final class MainActivity extends Activity {
         page.addView(modes);
         gap(page,16);
 
-        TextView strength=label("Niveau graphique : "+cfg.level+" / 4",15,true);
+        TextView strength=label(getString(R.string.level_label,cfg.level),15,true);
         page.addView(strength);
         SeekBar slider=new SeekBar(this);
         slider.setMax(4); slider.setProgress(cfg.level);
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar b,int progress,boolean fromUser) {
-                if (fromUser) {cfg.level=progress; strength.setText("Niveau graphique : "+progress+" / 4"); broadcastChange();}
+                if (fromUser) {cfg.level=progress; strength.setText(getString(R.string.level_label,progress)); broadcastChange();}
             }
             @Override public void onStartTrackingTouch(SeekBar b) {}
             @Override public void onStopTrackingTouch(SeekBar b) {}
@@ -128,7 +122,7 @@ public final class MainActivity extends Activity {
         gap(page,20);
 
         Button apply=new Button(this);
-        apply.setText("ACTUALISER SYSTEMUI");
+        apply.setText(R.string.refresh);
         apply.setOnClickListener(v->broadcastChange());
         page.addView(apply);
         gap(page,12);
@@ -136,17 +130,14 @@ public final class MainActivity extends Activity {
         resourceInfo.setTextColor(Color.rgb(164,207,236));
         page.addView(resourceInfo);
         Button inspect=new Button(this);
-        inspect.setText("VÉRIFIER LES RESSOURCES SATELLITE");
+        inspect.setText(R.string.check_resources);
         inspect.setOnClickListener(v->inspectResources());
         page.addView(inspect);
         inspectResources();
 
         gap(page,22);
         TextView help=label(
-            "Installation : activer Satellite Visual dans LSPosed, périmètre System UI uniquement, "
-            + "puis redémarrer. Si aucun indicateur n'apparaît, ouvrir les journaux LSPosed et "
-            + "rechercher « SatelliteVisualNative ». Si SystemUI devient instable, désactiver le module et redémarrer. "
-            + "Les versions Samsung utilisent parfois une pipeline différente : l'affichage n'est pas garanti.",13,false);
+            getString(R.string.help),13,false);
         help.setTextColor(Color.rgb(163,182,207));
         page.addView(help);
     }
@@ -167,10 +158,10 @@ public final class MainActivity extends Activity {
                 int id=r.getIdentifier(name,"drawable","com.android.systemui");
                 if(id!=0) found.append(name).append("\n");
             }
-            if(found.length()==0) resourceInfo.setText("Ressources AOSP classiques introuvables. Un diagnostic des classes One UI est nécessaire.");
-            else resourceInfo.setText("Ressources satellites système détectées :\n"+found);
+            if(found.length()==0) resourceInfo.setText(R.string.no_resources);
+            else resourceInfo.setText(getString(R.string.resources_found,found.toString()));
         } catch(Exception e) {
-            resourceInfo.setText("Impossible de lire les ressources SystemUI depuis l'app : "+e.getClass().getSimpleName());
+            resourceInfo.setText(getString(R.string.resources_error,e.getClass().getSimpleName()));
         }
     }
 }

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Samsung SATIconEmul’</string>
+  <string name="xposed_description">Icône satellite purement visuelle pour Samsung One UI. Aucune connexion satellite ni fonction de secours réelle.</string>
+  <string name="title">SATELLITE NTN</string>
+  <string name="kicker">SAMSUNG SYSTEMUI  •  ICÔNE NATIVE  •  V2.2</string>
+  <string name="explanation">Ajoute un emplacement purement visuel dans la barre d’état Samsung. Utilise une icône satellite du système sans modifier la véritable connexion réseau.</string>
+  <string name="warning">SIMULATION VISUELLE UNIQUEMENT\nAUCUN ACCÈS RÉEL À STARLINK / T-SATELLITE / SOS</string>
+  <string name="toggle">Afficher l’icône satellite simulée</string>
+  <string name="profile_label">Profil (étiquette de simulation)</string>
+  <string name="level_label">Niveau graphique : %1$d / 4</string>
+  <string name="refresh">ACTUALISER SYSTEMUI</string>
+  <string name="check_resources">VÉRIFIER LES RESSOURCES SATELLITE</string>
+  <string name="help">Installation : activer Samsung SATIconEmul’ dans LSPosed, périmètre System UI uniquement, puis redémarrer. Si aucune icône n’apparaît, rechercher SatelliteVisualNative dans les journaux LSPosed. Si SystemUI devient instable, désactiver le module et redémarrer. La compatibilité varie selon les versions de One UI.</string>
+  <string name="no_resources">Ressources satellite AOSP classiques introuvables. Un diagnostic de compatibilité One UI peut être nécessaire.</string>
+  <string name="resources_found">Ressources satellite système détectées :\n%1$s</string>
+  <string name="resources_error">Impossible de lire les ressources SystemUI : %1$s</string>
+  <string-array name="simulation_modes">
+    <item>Satellite NTN connecté (fictif)</item>
+    <item>Satellite SOS (fictif)</item>
+    <item>T-Satellite / Starlink (fictif)</item>
+    <item>Recherche de satellite (fictive)</item>
+  </string-array>
+</resources>

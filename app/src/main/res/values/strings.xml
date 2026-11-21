@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">Samsung SATIconEmul’</string>
+  <string name="xposed_description">Visual-only satellite status bar icon for Samsung One UI. No real satellite or emergency functionality.</string>
+  <string name="title">SATELLITE NTN</string>
+  <string name="kicker">SAMSUNG SYSTEMUI  •  NATIVE ICON  •  V2.2</string>
+  <string name="explanation">Adds a dedicated visual-only slot in the Samsung status bar. Uses a built-in satellite icon without changing the actual network connection.</string>
+  <string name="warning">VISUAL SIMULATION ONLY\nNO ACTUAL STARLINK / T-SATELLITE / SOS ACCESS</string>
+  <string name="toggle">Show simulated satellite icon</string>
+  <string name="profile_label">Simulation profile (display label only)</string>
+  <string name="level_label">Visual signal level: %1$d / 4</string>
+  <string name="refresh">REFRESH SYSTEMUI</string>
+  <string name="check_resources">CHECK SATELLITE RESOURCES</string>
+  <string name="help">Setup: enable Samsung SATIconEmul’ in LSPosed and scope it to System UI only, then reboot. If no icon appears, check LSPosed logs for SatelliteVisualNative. If SystemUI becomes unstable, disable the module and reboot. Samsung implementations differ; display is not guaranteed.</string>
+  <string name="no_resources">Classic AOSP satellite resources not found. Your One UI version may require separate compatibility checks.</string>
+  <string name="resources_found">System satellite resources detected:\n%1$s</string>
+  <string name="resources_error">Cannot read SystemUI resources: %1$s</string>
+  <string-array name="simulation_modes">
+    <item>NTN satellite connected (simulated)</item>
+    <item>Satellite SOS (simulated)</item>
+    <item>T-Satellite / Starlink (simulated)</item>
+    <item>Searching for satellite (simulated)</item>
+  </string-array>
+</resources>
