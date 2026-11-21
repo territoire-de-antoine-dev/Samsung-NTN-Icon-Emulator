@@ -30,7 +30,21 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public final class ModuleHook implements IXposedHookLoadPackage {
     private static final String TAG = "SatelliteVisualNative: ";
     private static final String SLOT = "satellite";
-    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    // Never construct a Handler during static initialization: LSPosed can load
+    // this class in zygote/system_server before the main looper exists.
+    // The callback is scheduled only once Android has prepared that looper.
+    private static void scheduleOnMain(Runnable task, long delayMillis) {
+        try {
+            Looper looper = Looper.getMainLooper();
+            if (looper == null) {
+                XposedBridge.log(TAG + "main looper not ready; skip early callback safely");
+                return;
+            }
+            new Handler(looper).postDelayed(task, delayMillis);
+        } catch (Throwable ex) {
+            XposedBridge.log(TAG + "scheduleOnMain: " + ex);
+        }
+    }
     private static final ArrayList<WeakReference<Object>> controllers = new ArrayList<>();
     private static Context systemContext;
     private static VisualConfig config = new VisualConfig();
@@ -58,14 +72,14 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                 XposedBridge.hookAllConstructors(clazz, new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam p) {
                         remember(p.thisObject);
-                        MAIN.postDelayed(() -> apply(p.thisObject), 1300);
+                        scheduleOnMain(() -> apply(p.thisObject), 1300);
                     }
                 });
                 XposedBridge.hookAllMethods(clazz, "addIconGroup", new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam p) {
                         if (!p.hasThrowable()) {
                             remember(p.thisObject);
-                            MAIN.postDelayed(() -> apply(p.thisObject), 700);
+                            scheduleOnMain(() -> apply(p.thisObject), 700);
                         }
                     }
                 });
@@ -123,7 +137,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
         BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 config = read(context);
-                MAIN.post(ModuleHook::refresh);
+                scheduleOnMain(ModuleHook::refresh, 0);
             }
         };
         try {
