@@ -2,11 +2,11 @@
 
 | Paramètres satellite / Satellite settings | Écran verrouillé / Lock screen | Panneau rapide / Quick panel |
 |:--:|:--:|:--:|
-| ![Satellite SOS settings](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/01-satellite-sos.webp) | ![Lock-screen satellite indicator](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/02-lockscreen.webp) | ![Samsung quick settings](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/03-quick-settings.webp) |
+| ![Satellite SOS settings](https://github.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/blob/main/docs/screenshots/01-satellite-sos.webp?raw=true) | ![Lock-screen satellite indicator](https://github.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/blob/main/docs/screenshots/02-lockscreen.webp?raw=true) | ![Samsung quick settings](https://github.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/blob/main/docs/screenshots/03-quick-settings.webp?raw=true) |
 
 | Interface anglaise / English preview | Interface française / French preview |
 |:--:|:--:|
-| ![English interface preview](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/04-interface-english.webp) | ![French interface preview](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/05-interface-french.webp) |
+| ![English interface preview](https://github.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/blob/main/docs/screenshots/04-interface-english.webp?raw=true) | ![French interface preview](https://github.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/blob/main/docs/screenshots/05-interface-french.webp?raw=true) |
 
 *FR : Aperçus d’un Galaxy S23 de test modifié ; certains menus et libellés Samsung proviennent du système et ne sont pas des fonctionnalités de l’application. Les captures d’interface datent d’une version précédente ; l’anglais montré était traduit à l’écran. Le Wi-Fi est masqué. Aucune connexion satellite réelle.*
 
