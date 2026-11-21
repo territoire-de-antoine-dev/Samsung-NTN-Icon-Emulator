@@ -479,19 +479,56 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             Class<?> iconType = Class.forName("com.android.internal.statusbar.StatusBarIcon");
             Icon icon = Icon.createWithResource(ctx, drawable);
             Object stockIcon = null;
+            String description = "Satellite simulé (affichage uniquement, aucune connexion)";
+            boolean anyConstructorMatched = false;
+
+            // Recent Android builds have added Type and Shape to the constructor.
+            // Older ones expose only the first six arguments.
             for (Constructor<?> ctor : iconType.getDeclaredConstructors()) {
                 Class<?>[] p = ctor.getParameterTypes();
-                if (p.length == 6 && p[0] == UserHandle.class && p[1] == String.class
-                    && p[2] == Icon.class && p[3] == int.class && p[4] == int.class
-                    && CharSequence.class.isAssignableFrom(p[5])) {
+                XposedBridge.log(TAG + "STATUSBARICON_CTOR " + ctor.toGenericString());
+                if (p.length < 6 || p.length > 8
+                    || p[0] != UserHandle.class || p[1] != String.class
+                    || p[2] != Icon.class || p[3] != int.class || p[4] != int.class
+                    || !CharSequence.class.isAssignableFrom(p[5])) continue;
+
+                Object[] args = new Object[p.length];
+                args[0] = android.os.Process.myUserHandle();
+                args[1] = ctx.getPackageName();
+                args[2] = icon;
+                args[3] = 0;
+                args[4] = 0;
+                args[5] = description;
+                boolean supported = true;
+                for (int i = 6; i < p.length; i++) {
+                    if (!p[i].isEnum()) { supported = false; break; }
+                    Object chosen = null;
+                    String desired = i == 6 ? "ResourceIcon" : "WRAP_CONTENT";
+                    for (Object constant : p[i].getEnumConstants()) {
+                        if (String.valueOf(constant).equals(desired)) {
+                            chosen = constant;
+                            break;
+                        }
+                    }
+                    if (chosen == null) { supported = false; break; }
+                    args[i] = chosen;
+                }
+                if (!supported) continue;
+                anyConstructorMatched = true;
+                try {
                     ctor.setAccessible(true);
-                    stockIcon = ctor.newInstance(android.os.Process.myUserHandle(), ctx.getPackageName(),
-                        icon, 0, 0, (CharSequence) "Satellite SIMULÉ : aucune connexion réelle");
+                    stockIcon = ctor.newInstance(args);
+                    XposedBridge.log(TAG + "STATUSBARICON_CONSTRUCTED params=" + p.length);
                     break;
+                } catch (Throwable ctorError) {
+                    XposedBridge.log(TAG + "STATUSBARICON_CTOR_FAILED " + ctorError);
                 }
             }
+
             if (stockIcon == null) {
-                logOnce("STATUS_BAR_ICON_CONSTRUCTOR_UNAVAILABLE");
+                logOnce(anyConstructorMatched
+                    ? "STATUSBARICON_CREATION_FAILED: see STATUSBARICON_CTOR_FAILED"
+                    : "STATUS_BAR_ICON_CONSTRUCTOR_UNAVAILABLE: see STATUSBARICON_CTOR");
                 return null;
             }
 
