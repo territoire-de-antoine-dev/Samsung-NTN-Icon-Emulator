@@ -60,7 +60,9 @@ public final class ModuleHook implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lp) {
-        if (!"com.android.systemui".equals(lp.packageName)) return;
+        // Do not hook screenshot and edge-lighting auxiliary processes.
+        if (!"com.android.systemui".equals(lp.packageName)
+            || !"com.android.systemui".equals(lp.processName)) return;
         String[] variants = {
             "com.android.systemui.statusbar.phone.ui.StatusBarIconControllerImpl",
             "com.android.systemui.statusbar.phone.StatusBarIconControllerImpl",
@@ -210,9 +212,18 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                 }
                 Class<?>[] p = selected.getParameterTypes();
                 Object[] args;
-                if (p.length == 3) {
-                    args = new Object[]{SLOT, res,
-                        (CharSequence) "Satellite SIMULÉ : aucune connexion réelle"};
+                if (p.length == 3 && p[0] == CharSequence.class && p[1] == String.class) {
+                    // Samsung One UI: setIcon(contentDescription, slot, resourceId).
+                    args = new Object[]{
+                        (CharSequence) "Satellite SIMULÉ : aucune connexion réelle",
+                        SLOT, res
+                    };
+                } else if (p.length == 3) {
+                    // Older AOSP-style setIcon(slot, resourceId, contentDescription).
+                    args = new Object[]{
+                        SLOT, res,
+                        (CharSequence) "Satellite SIMULÉ : aucune connexion réelle"
+                    };
                 } else {
                     Object stockIcon = createNativeStatusBarIcon(p[1], ctx, res);
                     if (stockIcon == null) {
@@ -303,6 +314,12 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             for (Method m : scan.getDeclaredMethods()) {
                 if (!m.getName().equals("setIcon")) continue;
                 Class<?>[] p = m.getParameterTypes();
+                // Samsung One UI on this S23 exposes the reverse-ordered method:
+                // setIcon(CharSequence description, String slot, int drawable).
+                if (p.length == 3 && p[0] == CharSequence.class && p[1] == String.class
+                    && (p[2] == int.class || p[2] == Integer.class)) {
+                    return m;
+                }
                 if (p.length == 3 && p[0] == String.class
                     && (p[1] == int.class || p[1] == Integer.class)
                     && CharSequence.class.isAssignableFrom(p[2])) {
@@ -339,6 +356,11 @@ public final class ModuleHook implements IXposedHookLoadPackage {
     private static boolean isManagedByModernPipeline(Object controller) {
         try {
             Object holder = XposedHelpers.callMethod(controller, "getIconHolder", SLOT, 0);
+            // Do not replace a genuine satellite icon currently owned by the system.
+            if (holder != null && !injected) {
+                logOnce("SATELLITE_SLOT_OCCUPIED: native icon already exists; leaving it untouched");
+                return true;
+            }
             return holder != null && holder.getClass().getName().toLowerCase().contains("bindable");
         } catch (Throwable ignored) {
             // Unknown Samsung implementation: we don't claim this is a guarantee.
