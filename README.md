@@ -1,27 +1,34 @@
-# Samsung NTN Icon Emulator 🛰️
+# Samsung NTN Icon Emulator — V2 🛰️
 
-Module **LSPosed + application Android** de **simulation visuelle** de l’icône satellite dans la barre d’état, sans aucune connexion satellite réelle. Projet expérimental pour Samsung Galaxy S23, KernelSU et One UI.
+## Objectif
+**Déclencher un indicateur satellite dans le vrai gestionnaire d'icônes de Samsung SystemUI**, plutôt que dessiner une surcouche personnalisée dans la barre d'état.
 
-## Fonctionnalités
-- Application mobile avec bouton ON/OFF, modes NTN / SOS simulé / Starlink simulé / recherche, signal fictif 0 à 4/4.
-- Décalage horizontal et contraste blanc/noir.
-- Aperçu graphique, synchronisation des réglages avec SystemUI.
-- Module LSPosed traditionnel (Xposed API 82) qui dessine un indicateur **SIM** au-dessus de la barre d’état. Aucun accès au modem, aux SMS, à l'opérateur, aux appels d'urgence, à iptables ou au réseau.
-- Une barre d’état Samsung peut refuser certains points d’accroche : dans ce cas, consulter les journaux LSPosed avec la recherche `SatelliteVisual`.
+Cette application est un **prototype expérimental LSPosed pour One UI**. Elle ne crée aucune liaison T-Mobile, Starlink, satellite ou SOS réelle. L'indicateur peut prêter à confusion : ne jamais s'y fier pour contacter les secours.
 
-## Installer depuis le téléphone (sans PC)
-1. Sur GitHub, ouvrir l’onglet **Actions**, puis **Compiler APK**. Ouvrir l’exécution réussie.
-2. Dans **Artifacts**, télécharger **Satellite-Visual-LSPosed-APK** et extraire `app-debug.apk`.
-3. Installer l’APK Android et ouvrir **Satellite Visual**.
-4. Dans LSPosed → Modules → Satellite Visual : activer le module ; dans son périmètre sélectionner **System UI (com.android.systemui)** seulement.
-5. Redémarrer le téléphone. Dans Satellite Visual, activer la simulation et choisir un mode, le signal et la position.
-6. Si rien ne s’affiche, vérifier le journal LSPosed avec `SatelliteVisual` : le hook SystemUI peut demander une adaptation à ta version One UI.
+## Nouveautés V2
+- Suppression du rendu bricolé de la V1 (plus de `ViewOverlay` ni de picto « SIM » dessiné).
+- Recherche de `StatusBarIconControllerImpl` (versions Samsung et AOSP).
+- Essai d'ajout de l'icône native dans le slot `satellite` de SystemUI.
+- Utilisation **exclusive de ressources satellite existantes** dans le système (`ic_satellite_connected_0/1/2`, etc.).
+- Contournement conditionnel du filtrage Samsung `hideBySimplification` pour le seul slot satellite.
+- Bouton de diagnostic indiquant si des ressources natives classiques ont été trouvées.
+- Réglage du signal fictif 0 à 4 et mode recherche; étiquettes « T-Satellite » / « Starlink » dans l'application, mais **pas de changement du véritable nom de réseau**.
 
-## Dépannage / retour arrière
-- À tout moment, désactiver la simulation dans l'application.
-- Si SystemUI devient instable, désactiver le module dans LSPosed puis redémarrer.
-- Retirer / désactiver FakeSim, qui n'est pas nécessaire et peut modifier le réseau.
-- **Ne jamais interpréter l'indicateur factice comme une disponibilité réelle de Satellite SOS.**
+## Installation **sur téléphone uniquement**
+1. GitHub → Actions → **Compiler APK** → dernier run réussi → Artifacts → télécharger et extraire `app-debug.apk`.
+2. **Désactiver la V1 dans LSPosed**. Cette APK debug a probablement une autre signature que la V1 : si la mise à jour est refusée, **désinstaller l'ancienne application** puis installer la V2. Tes réglages pourront être réinitialisés.
+3. LSPosed → Modules → **Satellite Visual** → activer et sélectionner uniquement `com.android.systemui`.
+4. Redémarrer le S23. Ouvrir l'application et activer l'indicateur.
+5. Appuyer sur **VÉRIFIER LES RESSOURCES SATELLITE**. Si aucun effet, exporter les journaux LSPosed correspondant à `SatelliteVisualNative`.
 
-## Statut
-Code source complet ; la compilation passe par GitHub Actions. Le rendu sur Android 17 / One UI 9 est **expérimental, non vérifié sur un appareil**.
+## Limitations
+- **Aucune garantie que le gestionnaire d'icônes Samsung One UI 9 rende un slot injecté**. Sur les versions récentes, des icônes sont dessinées par une pipeline Kotlin/Compose spécifique et ignorent l'ancienne API.
+- Si Samsung ne fournit aucun drawable satellite reconnu, la V2 n'affiche **rien** plutôt qu'une imitation grossière.
+- L'indicateur ne simule **pas** la véritable liaison opérateur et n'altère pas la disponibilité d'urgence. La vraie identité d'opérateur T-Mobile et les flux radio restent inchangés.
+- Cette expérimentation n'est pas encore validée sur Galaxy S23 sous One UI 9.
+
+## Compilation
+GitHub Actions construit automatiquement une APK debug. Pas de PC nécessaire.
+
+## Sécurité / retour arrière
+Si SystemUI devient instable, désactiver le module dans LSPosed et redémarrer. Désactiver également FakeSim Termux si tu l'utilises : ce module est indépendant de ce projet.
