@@ -374,21 +374,89 @@ public final class ModuleHook implements IXposedHookLoadPackage {
         return null;
     }
 
+    private static Method exactMethod(Class<?> clazz, String name, Class<?>... types) {
+        for (Class<?> scan = clazz; scan != null; scan = scan.getSuperclass()) {
+            try {
+                Method method = scan.getDeclaredMethod(name, types);
+                method.setAccessible(true);
+                return method;
+            } catch (NoSuchMethodException ignored) { }
+            catch (Throwable error) {
+                XposedBridge.log(TAG + "method lookup " + name + ": " + error);
+            }
+        }
+        return null;
+    }
+
+    private static boolean listMethodsLogged;
+
+    private static void reportIconListSignatures(Class<?> clazz) {
+        if (listMethodsLogged) return;
+        listMethodsLogged = true;
+        int count = 0;
+        for (Class<?> scan = clazz; scan != null; scan = scan.getSuperclass()) {
+            for (Method method : scan.getDeclaredMethods()) {
+                String name = method.getName();
+                if (name.equals("getIcon") || name.equals("getIconHolder")
+                    || name.equals("getSlot") || name.equals("getSlotIndex")
+                    || name.equals("getSlotName") || name.equals("size")
+                    || name.equals("setIcon") || name.equals("getSlots")) {
+                    XposedBridge.log(TAG + "ICON_LIST_METHOD " + method.toGenericString());
+                    if (++count >= 30) return;
+                }
+            }
+        }
+    }
+
     private static Object getSatelliteHolder(Object controller) throws Exception {
         Object iconList = null;
         for (Class<?> scan = controller.getClass(); scan != null; scan = scan.getSuperclass()) {
             try {
-                Field f = scan.getDeclaredField("mStatusBarIconList");
-                f.setAccessible(true);
-                iconList = f.get(controller);
+                Field field = scan.getDeclaredField("mStatusBarIconList");
+                field.setAccessible(true);
+                iconList = field.get(controller);
                 break;
             } catch (NoSuchFieldException ignored) { }
         }
-        if (iconList == null) {
+        if (iconList == null)
             throw new IllegalStateException("NO_SAMSUNG_ICON_LIST: refuse blind icon injection");
+
+        Class<?> type = iconList.getClass();
+        reportIconListSignatures(type);
+        // Newer AOSP layout: getIconHolder(String slot, int tag).
+        Method direct = exactMethod(type, "getIconHolder", String.class, int.class);
+        if (direct != null) return direct.invoke(iconList, SLOT, 0);
+
+        // Older/Samsung layout: find a slot's index, then getIcon(index, tag).
+        Method byIndex = exactMethod(type, "getIcon", int.class, int.class);
+        if (byIndex == null) byIndex = exactMethod(type, "getIconHolder", int.class, int.class);
+        if (byIndex == null) {
+            logOnce("NO_COMPATIBLE_ICON_LOOKUP: see ICON_LIST_METHOD signatures");
+            throw new NoSuchMethodException("No compatible Samsung getIcon/getIconHolder lookup");
         }
-        // The icon list, not the controller, owns getIconHolder().
-        return XposedHelpers.callMethod(iconList, "getIconHolder", SLOT, 0);
+
+        Integer index = null;
+        // Prefer a read-only slot enumeration. Some versions insert a new slot
+        // as a SIDE EFFECT of getSlotIndex(); avoid that during inspection.
+        Method size = exactMethod(type, "size");
+        Method slotName = exactMethod(type, "getSlotName", int.class);
+        if (size != null && slotName != null) {
+            int count = (Integer) size.invoke(iconList);
+            for (int i = 0; i < count && i < 512; i++) {
+                Object name = slotName.invoke(iconList, i);
+                if (SLOT.equals(name)) { index = i; break; }
+            }
+            if (index == null) return null; // Unoccupied slot, can create.
+        } else {
+            Method slotIndex = exactMethod(type, "getSlotIndex", String.class);
+            if (slotIndex == null) {
+                logOnce("NO_SAFE_SLOT_INDEX_LOOKUP: cannot inspect existing satellite icon");
+                throw new NoSuchMethodException("No Samsung getSlotIndex(String)");
+            }
+            // Only use when no non-mutating method exists; older AOSP may insert.
+            index = (Integer) slotIndex.invoke(iconList, SLOT);
+        }
+        return byIndex.invoke(iconList, index, 0);
     }
 
     private static Object createNativeIconHolder(Class<?> holderClass, Context ctx, int drawable) {
