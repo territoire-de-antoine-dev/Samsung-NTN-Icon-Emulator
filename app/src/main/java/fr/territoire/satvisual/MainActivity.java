@@ -41,6 +41,13 @@ public final class MainActivity extends Activity {
         cfg.save(this);
         Intent i = new Intent(VisualConfig.REFRESH);
         i.setPackage("com.android.systemui");
+        // Send only non-sensitive display settings, so SystemUI needn't resolve
+        // the app's ContentProvider during early Android startup.
+        i.putExtra("enabled", cfg.enabled);
+        i.putExtra("mode", cfg.mode);
+        i.putExtra("level", cfg.level);
+        i.putExtra("offset", cfg.offset);
+        i.putExtra("tone", cfg.tone);
         sendBroadcast(i);
     }
 
@@ -59,7 +66,7 @@ public final class MainActivity extends Activity {
         setContentView(scroller);
 
         page.addView(label("SATELLITE NTN",27,true));
-        TextView kicker = label("SAMSUNG SYSTEMUI  •  ICÔNE NATIVE  •  V2.1",12,false);
+        TextView kicker = label("SAMSUNG SYSTEMUI  •  ICÔNE NATIVE  •  V2.1.1",12,false);
         kicker.setTextColor(Color.rgb(102,195,239));
         page.addView(kicker);
         gap(page,20);
@@ -142,6 +149,11 @@ public final class MainActivity extends Activity {
             + "Les versions Samsung utilisent parfois une pipeline différente : l'affichage n'est pas garanti.",13,false);
         help.setTextColor(Color.rgb(163,182,207));
         page.addView(help);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (cfg != null) broadcastChange();
     }
 
     private void inspectResources() {
