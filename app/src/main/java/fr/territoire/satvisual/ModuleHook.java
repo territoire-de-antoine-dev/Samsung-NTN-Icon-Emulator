@@ -423,40 +423,49 @@ public final class ModuleHook implements IXposedHookLoadPackage {
 
         Class<?> type = iconList.getClass();
         reportIconListSignatures(type);
-        // Newer AOSP layout: getIconHolder(String slot, int tag).
-        Method direct = exactMethod(type, "getIconHolder", String.class, int.class);
-        if (direct != null) return direct.invoke(iconList, SLOT, 0);
 
-        // Older/Samsung layout: find a slot's index, then getIcon(index, tag).
-        Method byIndex = exactMethod(type, "getIcon", int.class, int.class);
-        if (byIndex == null) byIndex = exactMethod(type, "getIconHolder", int.class, int.class);
-        if (byIndex == null) {
-            logOnce("NO_COMPATIBLE_ICON_LOOKUP: see ICON_LIST_METHOD signatures");
-            throw new NoSuchMethodException("No compatible Samsung getIcon/getIconHolder lookup");
+        // Read the actual signature printed by this Galaxy S23:
+        // StatusBarIconList.getIconHolder(int, String).
+        Method lookup = exactMethod(type, "getIconHolder", int.class, String.class);
+        if (lookup != null) {
+            // Before editing, check for any existing system-owned slot contents,
+            // including holders with a non-zero tag.
+            Method slotGetter = exactMethod(type, "getSlot", String.class);
+            if (slotGetter == null)
+                throw new NoSuchMethodException("NO_SLOT_INSPECTION: getSlot(String) missing");
+            Object slot = slotGetter.invoke(iconList, SLOT);
+            if (slot == null)
+                throw new IllegalStateException("NULL_SATELLITE_SLOT");
+
+            Object candidate = lookup.invoke(iconList, 0, SLOT);
+            Method hasIcons = exactMethod(slot.getClass(), "hasIconsInSlot");
+            if (hasIcons != null && Boolean.TRUE.equals(hasIcons.invoke(slot))
+                && candidate == null) {
+                // An existing secondary or bindable icon must not be overwritten.
+                throw new IllegalStateException("SATELLITE_SLOT_OWNED_BY_ANOTHER_ICON");
+            }
+            // If hasIconsInSlot isn't available, inspect known holder-list methods
+            // rather than treating an unknown occupied slot as empty.
+            if (hasIcons == null) {
+                Method list = exactMethod(slot.getClass(), "getHolderList");
+                if (list == null)
+                    throw new NoSuchMethodException("NO_SAFE_SLOT_CONTENT_CHECK");
+                Object holders = list.invoke(slot);
+                if (holders instanceof java.util.Collection
+                    && !((java.util.Collection<?>) holders).isEmpty()
+                    && candidate == null) {
+                    throw new IllegalStateException("SATELLITE_SLOT_OCCUPIED_WITH_SECONDARY_ICON");
+                }
+            }
+            return candidate;
         }
 
-        Integer index = null;
-        // Prefer a read-only slot enumeration. Some versions insert a new slot
-        // as a SIDE EFFECT of getSlotIndex(); avoid that during inspection.
-        Method size = exactMethod(type, "size");
-        Method slotName = exactMethod(type, "getSlotName", int.class);
-        if (size != null && slotName != null) {
-            int count = (Integer) size.invoke(iconList);
-            for (int i = 0; i < count && i < 512; i++) {
-                Object name = slotName.invoke(iconList, i);
-                if (SLOT.equals(name)) { index = i; break; }
-            }
-            if (index == null) return null; // Unoccupied slot, can create.
-        } else {
-            Method slotIndex = exactMethod(type, "getSlotIndex", String.class);
-            if (slotIndex == null) {
-                logOnce("NO_SAFE_SLOT_INDEX_LOOKUP: cannot inspect existing satellite icon");
-                throw new NoSuchMethodException("No Samsung getSlotIndex(String)");
-            }
-            // Only use when no non-mutating method exists; older AOSP may insert.
-            index = (Integer) slotIndex.invoke(iconList, SLOT);
-        }
-        return byIndex.invoke(iconList, index, 0);
+        // AOSP releases use the reverse signature; keep compatibility.
+        lookup = exactMethod(type, "getIconHolder", String.class, int.class);
+        if (lookup != null) return lookup.invoke(iconList, SLOT, 0);
+
+        logOnce("NO_COMPATIBLE_ICON_LOOKUP: see ICON_LIST_METHOD signatures");
+        throw new NoSuchMethodException("Unknown Samsung getIconHolder signature");
     }
 
     private static Object createNativeIconHolder(Class<?> holderClass, Context ctx, int drawable) {
