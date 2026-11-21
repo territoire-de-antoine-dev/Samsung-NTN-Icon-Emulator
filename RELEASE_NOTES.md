@@ -1,3 +1,17 @@
+## 📸 Captures d’écran / Screenshots
+
+| Paramètres satellite / Satellite settings | Écran verrouillé / Lock screen | Panneau rapide / Quick panel |
+|:--:|:--:|:--:|
+| ![Satellite SOS settings](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/01-satellite-sos.webp) | ![Lock-screen satellite indicator](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/02-lockscreen.webp) | ![Samsung quick settings](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/03-quick-settings.webp) |
+
+| Interface anglaise / English preview | Interface française / French preview |
+|:--:|:--:|
+| ![English interface preview](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/04-interface-english.webp) | ![French interface preview](https://raw.githubusercontent.com/territoire-de-antoine-dev/Samsung-NTN-Icon-Emulator/main/docs/screenshots/05-interface-french.webp) |
+
+*FR : Aperçus d’un Galaxy S23 de test modifié ; certains menus et libellés Samsung proviennent du système et ne sont pas des fonctionnalités de l’application. Les captures d’interface datent d’une version précédente ; l’anglais montré était traduit à l’écran. Le Wi-Fi est masqué. Aucune connexion satellite réelle.*
+
+*EN: Preview shots from a modified Galaxy S23; some Samsung menus and network labels are part of that test device, not features enabled by this app. App screenshots were taken on an earlier version; the English view used on-screen translation. Wi-Fi name redacted. No real satellite connection.*
+
 # 🇫🇷 Samsung SATIconEmul’ — Version 2.2.0
 
 **Icône satellite fictive pour certains appareils Samsung One UI via LSPosed.**

@@ -6,6 +6,20 @@ Module Android/LSPosed **expérimental et non officiel** permettant d’afficher
 
 > ⚠️ **Simulation visuelle uniquement.** L’icône ne signifie pas que le téléphone est connecté à un satellite. L’application ne fournit **ni réseau satellite, ni appels ou messages d’urgence SOS, ni accès Starlink/T-Satellite**. Ne vous fiez jamais à cet indicateur en situation d’urgence.
 
+## Captures d’écran / Screenshots 📱
+
+| Paramètres satellite / Satellite settings | Écran verrouillé / Lock screen | Panneau rapide / Quick panel |
+|:--:|:--:|:--:|
+| ![Satellite SOS settings](docs/screenshots/01-satellite-sos.webp) | ![Lock-screen satellite indicator](docs/screenshots/02-lockscreen.webp) | ![Samsung quick settings](docs/screenshots/03-quick-settings.webp) |
+
+| Interface anglaise / English preview | Interface française / French preview |
+|:--:|:--:|
+| ![English interface preview](docs/screenshots/04-interface-english.webp) | ![French interface preview](docs/screenshots/05-interface-french.webp) |
+
+> **FR :** Captures fournies depuis un Galaxy S23 modifié. Les écrans « Satellite SOS », « Free | Satellite » et le raccourci du panneau rapide appartiennent à l’environnement système de test : **l’application ne garantit pas ces menus, cette étiquette réseau ou une connexion satellite**. Les deux dernières captures montrent une interface antérieure à la v2.2 ; l’aperçu anglais utilisait une traduction à l’écran. Les aperçus sont volontairement compressés et le nom du Wi-Fi a été masqué.
+>
+> **EN:** Screenshots from a modified Galaxy S23 test device. The “Satellite SOS” menu, “Free | Satellite” label and Quick Settings tile belong to that device’s system setup: **this app does not guarantee those menus, network labels or any satellite connection**. The last two shots show an earlier app version; the English preview used on-screen translation. Images are lightweight previews; the Wi-Fi network name was redacted.
+
 ## Français
 
 ### Fonctions
