@@ -29,13 +29,13 @@ import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
- * V2 native SystemUI icon-slot experiment.
+ * Display-only LSPosed experiment with a dedicated icon slot and stock Samsung icon resource.
  * No fake telephony connectivity state, satellite modem, SOS, firewall or packet interception.
- * Uses only stock Samsung/AOSP SystemUI drawables. Does not draw an overlay.
+ * Uses only stock Samsung/AOSP SystemUI drawables. No overlay, no write to the real satellite slot.
  */
 public final class ModuleHook implements IXposedHookLoadPackage {
     private static final String TAG = "SatelliteVisualNative: ";
-    private static final String SLOT = "satellite";
+    private static final String SLOT = "satellite_visual_demo";
     // Never construct a Handler during static initialization: LSPosed can load
     // this class in zygote/system_server before the main looper exists.
     // The callback is scheduled only once Android has prepared that looper.
@@ -160,6 +160,12 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             else ctx.registerReceiver(receiver, filter);
             registered = true;
             XposedBridge.log(TAG + "settings listener ready");
+            // Samsung sometimes registers our settings provider after SystemUI starts.
+            scheduleOnMain(() -> {
+                config = read(ctx);
+                XposedBridge.log(TAG + "CONFIG_BOOT_RETRY enabled=" + config.enabled);
+                if (config.enabled) refresh();
+            }, 4500);
         } catch (Throwable err) {
             XposedBridge.log(TAG + "receiver registration failed: " + err);
         }
@@ -198,7 +204,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             if (!config.enabled) {
                 if (injected) {
                     removeIfOurs(controller);
-                    XposedBridge.log(TAG + "native icon switched off");
+                    XposedBridge.log(TAG + "demo icon switched off");
                 }
                 return;
             }
@@ -211,11 +217,11 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             try {
                 // Samsung's three-argument setIcon updates an existing StatusBarIcon:
                 // it throws when the internal icon object has never been registered.
-                // First inspect the real icon list; never overwrite an OS-owned satellite slot.
+                // Use a private visual slot; never overwrite the OS-owned "satellite" slot.
                 Object existing = getSatelliteHolder(controller);
                 Object owned = ownedIcons.get(controller);
                 if (existing != null && existing != owned) {
-                    logOnce("SATELLITE_SLOT_ALREADY_OWNED_BY_SYSTEM: refusing to replace it");
+                    logOnce("VISUAL_SLOT_CONFLICT: refusing to replace another holder");
                     return;
                 }
                 if (existing == null && owned != null) {
@@ -241,7 +247,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                     ownedIcons.put(controller, holder);
                     injected = true;
                     lastRes = res;
-                    XposedBridge.log(TAG + "NATIVE_HOLDER_REGISTERED slot=" + SLOT);
+                    XposedBridge.log(TAG + "DEMO_NATIVE_HOLDER_REGISTERED slot=" + SLOT + " drawable=" + res);
                 } else {
                     Method update = findCompatibleSetIcon(controller.getClass());
                     if (update == null || update.getParameterTypes().length != 3) {
@@ -258,7 +264,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                     update.setAccessible(true);
                     update.invoke(controller, args);
                     lastRes = res;
-                    XposedBridge.log(TAG + "INJECTED_NATIVE_ICON slot=" + SLOT
+                    XposedBridge.log(TAG + "DEMO_NATIVE_ICON_UPDATED slot=" + SLOT
                         + " level=" + config.level);
                 }
                 XposedHelpers.callMethod(controller, "setIconVisibility", SLOT, true);
@@ -428,7 +434,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
         // StatusBarIconList.getIconHolder(int, String).
         Method lookup = exactMethod(type, "getIconHolder", int.class, String.class);
         if (lookup != null) {
-            // Before editing, check for any existing system-owned slot contents,
+            // Check whether the display-only slot already contains any foreign icon,
             // including holders with a non-zero tag.
             Method slotGetter = exactMethod(type, "getSlot", String.class);
             if (slotGetter == null)
@@ -498,6 +504,35 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                     factory.setAccessible(true);
                     return factory.invoke(null, stockIcon);
                 }
+            }
+            // Kotlin Samsung builds may expose the factory on Companion.
+            try {
+                Field companionField = holderClass.getDeclaredField("Companion");
+                companionField.setAccessible(true);
+                Object companion = companionField.get(null);
+                if (companion != null) {
+                    for (Method factory : companion.getClass().getDeclaredMethods()) {
+                        Class<?>[] p = factory.getParameterTypes();
+                        if (factory.getName().equals("fromIcon") && p.length == 1
+                            && p[0].isAssignableFrom(iconType)
+                            && holderClass.isAssignableFrom(factory.getReturnType())) {
+                            factory.setAccessible(true);
+                            return factory.invoke(companion, stockIcon);
+                        }
+                    }
+                }
+            } catch (NoSuchFieldException ignored) { }
+            // Alternate versions may provide a StatusBarIconHolder(StatusBarIcon) constructor.
+            for (Constructor<?> ctor : holderClass.getDeclaredConstructors()) {
+                Class<?>[] p = ctor.getParameterTypes();
+                if (p.length == 1 && p[0].isAssignableFrom(iconType)) {
+                    ctor.setAccessible(true);
+                    return ctor.newInstance(stockIcon);
+                }
+            }
+            for (Method factory : holderClass.getDeclaredMethods()) {
+                if (factory.getName().toLowerCase().contains("icon"))
+                    XposedBridge.log(TAG + "HOLDER_FACTORY " + factory.toGenericString());
             }
             logOnce("STATUS_BAR_ICON_HOLDER_FACTORY_UNAVAILABLE");
         } catch (Throwable err) {
