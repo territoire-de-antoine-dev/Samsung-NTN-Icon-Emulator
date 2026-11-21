@@ -1,4 +1,4 @@
-# Samsung SATIconEmul’ 🛰️
+# Samsung SATellite Icon Emulolator 🛰️
 
 **Français** · [English](#english)
 
