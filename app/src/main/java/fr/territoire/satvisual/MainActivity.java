@@ -59,14 +59,14 @@ public final class MainActivity extends Activity {
         setContentView(scroller);
 
         page.addView(label("SATELLITE NTN",27,true));
-        TextView kicker = label("SAMSUNG SYSTEMUI  •  NATIVE ICON TEST  •  V2",12,false);
+        TextView kicker = label("SAMSUNG SYSTEMUI  •  ICÔNE NATIVE  •  V2.1",12,false);
         kicker.setTextColor(Color.rgb(102,195,239));
         page.addView(kicker);
         gap(page,20);
 
         TextView explanation = label(
-            "Cette version tente d'activer l'emplacement « satellite » du gestionnaire d'icônes natif Samsung. "
-            + "Elle ne dessine plus l'icône bricolée de la V1.",16,false);
+            "Cette version crée un emplacement visuel indépendant dans la barre d'état Samsung. "
+            + "Elle utilise le dessin satellite natif, sans simuler de connexion réseau.",16,false);
         explanation.setTextColor(Color.rgb(207,223,235));
         page.addView(explanation);
         gap(page,14);
@@ -76,7 +76,7 @@ public final class MainActivity extends Activity {
         gap(page,25);
 
         Switch toggle=new Switch(this);
-        toggle.setText("Activer l'indicateur système simulé");
+        toggle.setText("Afficher l'icône satellite simulée");
         toggle.setTextSize(16);
         toggle.setTextColor(Color.WHITE);
         toggle.setChecked(cfg.enabled);
