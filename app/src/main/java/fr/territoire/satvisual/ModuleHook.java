@@ -16,6 +16,7 @@ import android.os.Looper;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 
@@ -54,6 +55,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
     private static boolean registered;
     private static boolean signaturesLogged;
     private static boolean errorLogged;
+    private static boolean injectionCauseLogged;
     private static boolean busy;
     private static boolean injected;
     private static int lastRes;
@@ -252,7 +254,20 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                 XposedBridge.log(TAG + "INJECTED_NATIVE_ICON slot=" + SLOT
                     + " method=" + selected + " level=" + config.level);
             } catch (Throwable error) {
-                logOnce("NATIVE_INJECTION_FAILED " + error);
+                // InvocationTargetException hides the actual SystemUI exception.
+                // Print the root cause once, rather than only its wrapper type.
+                if (!injectionCauseLogged) {
+                    injectionCauseLogged = true;
+                    Throwable cause = error;
+                    for (int depth = 0; depth < 5 && cause instanceof InvocationTargetException; depth++) {
+                        Throwable target = ((InvocationTargetException) cause).getTargetException();
+                        if (target == null || target == cause) break;
+                        cause = target;
+                    }
+                    XposedBridge.log(TAG + "NATIVE_INJECTION_ROOT_CAUSE "
+                        + cause.getClass().getName() + ": " + cause.getMessage());
+                    XposedBridge.log(cause);
+                }
             }
         } catch (Throwable ex) {
             XposedBridge.log(TAG + "apply failed safely: " + ex);
