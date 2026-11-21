@@ -326,7 +326,7 @@ public final class ModuleHook implements IXposedHookLoadPackage {
                     && p[2] == Icon.class && p[3] == int.class && p[4] == int.class
                     && CharSequence.class.isAssignableFrom(p[5])) {
                     constructor.setAccessible(true);
-                    return constructor.newInstance(UserHandle.of(0), ctx.getPackageName(),
+                    return constructor.newInstance(android.os.Process.myUserHandle(), ctx.getPackageName(),
                         icon, 0, 0, (CharSequence) "Satellite SIMULÉ : aucune connexion réelle");
                 }
             }
