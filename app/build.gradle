@@ -6,8 +6,8 @@ android {
     applicationId 'fr.territoire.satvisual'
     minSdk 29
     targetSdk 35
-    versionCode 11
-    versionName '2.1.1'
+    versionCode 12
+    versionName '2.1.2'
   }
   compileOptions {
     sourceCompatibility JavaVersion.VERSION_17
