@@ -18,6 +18,8 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.WeakHashMap;
 import java.util.ArrayList;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -59,6 +61,8 @@ public final class ModuleHook implements IXposedHookLoadPackage {
     private static boolean busy;
     private static boolean injected;
     private static int lastRes;
+    // Only ever remove/update a satellite icon installed by our own module.
+    private static final WeakHashMap<Object, Object> ownedIcons = new WeakHashMap<>();
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lp) {
@@ -205,54 +209,59 @@ public final class ModuleHook implements IXposedHookLoadPackage {
             }
 
             try {
-                // The three-argument AOSP setIcon signature is NOT present on this Samsung build.
-                // Discover an actually supported signature before invoking anything.
-                Method selected = findCompatibleSetIcon(controller.getClass());
-                if (selected == null) {
-                    logOnce("NO_COMPATIBLE_SETICON_SIGNATURE: consult METHOD lines from this build.");
+                // Samsung's three-argument setIcon updates an existing StatusBarIcon:
+                // it throws when the internal icon object has never been registered.
+                // First inspect the real icon list; never overwrite an OS-owned satellite slot.
+                Object existing = getSatelliteHolder(controller);
+                Object owned = ownedIcons.get(controller);
+                if (existing != null && existing != owned) {
+                    logOnce("SATELLITE_SLOT_ALREADY_OWNED_BY_SYSTEM: refusing to replace it");
                     return;
                 }
-                Class<?>[] p = selected.getParameterTypes();
-                Object[] args;
-                if (p.length == 3 && p[0] == CharSequence.class && p[1] == String.class) {
-                    // Samsung One UI: setIcon(contentDescription, slot, resourceId).
-                    args = new Object[]{
-                        (CharSequence) "Satellite SIMULÉ : aucune connexion réelle",
-                        SLOT, res
-                    };
-                } else if (p.length == 3) {
-                    // Older AOSP-style setIcon(slot, resourceId, contentDescription).
-                    args = new Object[]{
-                        SLOT, res,
-                        (CharSequence) "Satellite SIMULÉ : aucune connexion réelle"
-                    };
-                } else {
-                    Object stockIcon = createNativeStatusBarIcon(p[1], ctx, res);
-                    if (stockIcon == null) {
-                        logOnce("NO_COMPATIBLE_STATUSBARICON_CONSTRUCTOR: method=" + selected);
+                if (existing == null && owned != null) {
+                    ownedIcons.remove(controller); // The system removed/replaced our icon.
+                    owned = null;
+                }
+
+                if (existing == null) {
+                    Method holderSetter = findHolderSetter(controller.getClass());
+                    if (holderSetter == null) {
+                        logOnce("NO_HOLDER_SETICON_METHOD: cannot initialize Samsung native satellite slot");
                         return;
                     }
-                    args = new Object[]{SLOT, stockIcon};
+                    Object holder = createNativeIconHolder(holderSetter.getParameterTypes()[1], ctx, res);
+                    if (holder == null) return;
+                    holderSetter.setAccessible(true);
+                    holderSetter.invoke(controller, SLOT, holder);
+                    Object installed = getSatelliteHolder(controller);
+                    if (installed != holder) {
+                        logOnce("SATELLITE_HOLDER_NOT_REGISTERED: Samsung did not retain inserted holder");
+                        return;
+                    }
+                    ownedIcons.put(controller, holder);
+                    injected = true;
+                    lastRes = res;
+                    XposedBridge.log(TAG + "NATIVE_HOLDER_REGISTERED slot=" + SLOT);
+                } else {
+                    Method update = findCompatibleSetIcon(controller.getClass());
+                    if (update == null || update.getParameterTypes().length != 3) {
+                        logOnce("NO_NATIVE_ICON_UPDATE_METHOD");
+                        return;
+                    }
+                    // This signature was verified from the user's One UI logs.
+                    Object[] args;
+                    Class<?>[] p = update.getParameterTypes();
+                    CharSequence description =
+                        "Satellite SIMULÉ : aucune connexion réelle";
+                    if (p[0] == CharSequence.class) args = new Object[]{description, SLOT, res};
+                    else args = new Object[]{SLOT, res, description};
+                    update.setAccessible(true);
+                    update.invoke(controller, args);
+                    lastRes = res;
+                    XposedBridge.log(TAG + "INJECTED_NATIVE_ICON slot=" + SLOT
+                        + " level=" + config.level);
                 }
-                // Do not overwrite an existing modern/bindable satellite icon slot:
-                // it may carry a genuine status (including emergency connectivity).
-                if (isManagedByModernPipeline(controller)) {
-                    logOnce("SATELLITE_SLOT_IS_MODERN_BINDABLE: native icon is owned by pipeline; leaving it untouched");
-                    return;
-                }
-                selected.setAccessible(true);
-                selected.invoke(controller, args);
-                try {
-                    XposedHelpers.callMethod(controller, "setIconVisibility", SLOT, true);
-                } catch (Throwable ignored) {
-                    try {
-                        XposedHelpers.callMethod(controller, "setIconVisibility", SLOT, true, 0);
-                    } catch (Throwable ignoredAgain) { }
-                }
-                lastRes = res;
-                injected = true;
-                XposedBridge.log(TAG + "INJECTED_NATIVE_ICON slot=" + SLOT
-                    + " method=" + selected + " level=" + config.level);
+                XposedHelpers.callMethod(controller, "setIconVisibility", SLOT, true);
             } catch (Throwable error) {
                 // InvocationTargetException hides the actual SystemUI exception.
                 // Print the root cause once, rather than only its wrapper type.
@@ -277,19 +286,21 @@ public final class ModuleHook implements IXposedHookLoadPackage {
     }
 
     private static void removeIfOurs(Object controller) {
+        Object owned = ownedIcons.get(controller);
+        if (owned == null) return;
         try {
+            if (getSatelliteHolder(controller) != owned) {
+                ownedIcons.remove(controller);
+                injected = !ownedIcons.isEmpty();
+                XposedBridge.log(TAG + "SATELLITE_OWNERSHIP_CHANGED: avoiding removal");
+                return;
+            }
             XposedHelpers.callMethod(controller, "removeIcon", SLOT, 0);
-            injected = false;
+            ownedIcons.remove(controller);
+            injected = !ownedIcons.isEmpty();
             lastRes = 0;
         } catch (Throwable e) {
-            // Some Samsung versions expose only the one-argument method.
-            try {
-                XposedHelpers.callMethod(controller, "removeIcon", SLOT);
-                injected = false;
-                lastRes = 0;
-            } catch (Throwable err) {
-                XposedBridge.log(TAG + "native icon removal failed: " + err);
-            }
+            XposedBridge.log(TAG + "native icon removal failed safely: " + e);
         }
     }
 
@@ -349,38 +360,73 @@ public final class ModuleHook implements IXposedHookLoadPackage {
         return twoArg;
     }
 
-    private static Object createNativeStatusBarIcon(Class<?> type, Context ctx, int drawable) {
-        try {
-            Icon icon = Icon.createWithResource(ctx, drawable);
-            for (Constructor<?> constructor : type.getDeclaredConstructors()) {
-                Class<?>[] p = constructor.getParameterTypes();
-                if (p.length == 6 && p[0] == UserHandle.class && p[1] == String.class
-                    && p[2] == Icon.class && p[3] == int.class && p[4] == int.class
-                    && CharSequence.class.isAssignableFrom(p[5])) {
-                    constructor.setAccessible(true);
-                    return constructor.newInstance(android.os.Process.myUserHandle(), ctx.getPackageName(),
-                        icon, 0, 0, (CharSequence) "Satellite SIMULÉ : aucune connexion réelle");
+    private static Method findHolderSetter(Class<?> cls) {
+        for (Class<?> scan = cls; scan != null; scan = scan.getSuperclass()) {
+            for (Method m : scan.getDeclaredMethods()) {
+                Class<?>[] p = m.getParameterTypes();
+                if (m.getName().equals("setIcon") && p.length == 2
+                    && p[0] == String.class
+                    && "com.android.systemui.statusbar.phone.StatusBarIconHolder".equals(p[1].getName())) {
+                    return m;
                 }
             }
-        } catch (Throwable ex) {
-            XposedBridge.log(TAG + "StatusBarIcon construction error: " + ex);
         }
         return null;
     }
 
-    private static boolean isManagedByModernPipeline(Object controller) {
-        try {
-            Object holder = XposedHelpers.callMethod(controller, "getIconHolder", SLOT, 0);
-            // Do not replace a genuine satellite icon currently owned by the system.
-            if (holder != null && !injected) {
-                logOnce("SATELLITE_SLOT_OCCUPIED: native icon already exists; leaving it untouched");
-                return true;
-            }
-            return holder != null && holder.getClass().getName().toLowerCase().contains("bindable");
-        } catch (Throwable ignored) {
-            // Unknown Samsung implementation: we don't claim this is a guarantee.
-            return false;
+    private static Object getSatelliteHolder(Object controller) throws Exception {
+        Object iconList = null;
+        for (Class<?> scan = controller.getClass(); scan != null; scan = scan.getSuperclass()) {
+            try {
+                Field f = scan.getDeclaredField("mStatusBarIconList");
+                f.setAccessible(true);
+                iconList = f.get(controller);
+                break;
+            } catch (NoSuchFieldException ignored) { }
         }
+        if (iconList == null) {
+            throw new IllegalStateException("NO_SAMSUNG_ICON_LIST: refuse blind icon injection");
+        }
+        // The icon list, not the controller, owns getIconHolder().
+        return XposedHelpers.callMethod(iconList, "getIconHolder", SLOT, 0);
+    }
+
+    private static Object createNativeIconHolder(Class<?> holderClass, Context ctx, int drawable) {
+        try {
+            Class<?> iconType = Class.forName("com.android.internal.statusbar.StatusBarIcon");
+            Icon icon = Icon.createWithResource(ctx, drawable);
+            Object stockIcon = null;
+            for (Constructor<?> ctor : iconType.getDeclaredConstructors()) {
+                Class<?>[] p = ctor.getParameterTypes();
+                if (p.length == 6 && p[0] == UserHandle.class && p[1] == String.class
+                    && p[2] == Icon.class && p[3] == int.class && p[4] == int.class
+                    && CharSequence.class.isAssignableFrom(p[5])) {
+                    ctor.setAccessible(true);
+                    stockIcon = ctor.newInstance(android.os.Process.myUserHandle(), ctx.getPackageName(),
+                        icon, 0, 0, (CharSequence) "Satellite SIMULÉ : aucune connexion réelle");
+                    break;
+                }
+            }
+            if (stockIcon == null) {
+                logOnce("STATUS_BAR_ICON_CONSTRUCTOR_UNAVAILABLE");
+                return null;
+            }
+
+            for (Method factory : holderClass.getDeclaredMethods()) {
+                Class<?>[] p = factory.getParameterTypes();
+                if (Modifier.isStatic(factory.getModifiers()) && p.length == 1
+                    && p[0].isAssignableFrom(iconType)
+                    && holderClass.isAssignableFrom(factory.getReturnType())
+                    && factory.getName().equals("fromIcon")) {
+                    factory.setAccessible(true);
+                    return factory.invoke(null, stockIcon);
+                }
+            }
+            logOnce("STATUS_BAR_ICON_HOLDER_FACTORY_UNAVAILABLE");
+        } catch (Throwable err) {
+            XposedBridge.log(TAG + "NATIVE_HOLDER_CREATION_FAILED " + err);
+        }
+        return null;
     }
 
     private static int findSamsungSatelliteResource(Context ctx, int level, int mode) {
