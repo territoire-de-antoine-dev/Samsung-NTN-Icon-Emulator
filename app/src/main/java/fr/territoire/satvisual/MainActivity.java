@@ -2,9 +2,8 @@ package fr.territoire.satvisual;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Canvas;
+import android.content.res.Resources;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -16,111 +15,150 @@ import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 
-/** Interface tactile mobile, aucune autorisation root ou réseau. */
+/**
+ * V2 native-icon controller. The phone's actual network/satellite status is never modified.
+ */
 public final class MainActivity extends Activity {
-  private VisualConfig cfg;
-  private Preview preview;
-  private int dp(float n) { return (int)(n*getResources().getDisplayMetrics().density+0.5f); }
-  private TextView text(String s,int size,boolean strong) {
-    TextView t=new TextView(this);
-    t.setText(s); t.setTextSize(size); t.setTextColor(Color.WHITE);
-    if (strong) t.setTypeface(null,1);
-    return t;
-  }
-  private void space(LinearLayout column,int size) {
-    column.addView(new View(this),new LinearLayout.LayoutParams(-1,dp(size)));
-  }
-  private void save() {
-    cfg.save(this);
-    if (preview!=null) preview.invalidate();
-    Intent i=new Intent(VisualConfig.REFRESH);
-    i.setPackage("com.android.systemui");
-    sendBroadcast(i);
-  }
-  @Override public void onCreate(Bundle b) {
-    super.onCreate(b);
-    cfg=VisualConfig.read(this);
-    getWindow().setStatusBarColor(Color.rgb(12,20,32));
-    getWindow().setNavigationBarColor(Color.rgb(12,20,32));
-    ScrollView scroll=new ScrollView(this);
-    LinearLayout column=new LinearLayout(this);
-    column.setOrientation(LinearLayout.VERTICAL);
-    column.setPadding(dp(18),dp(20),dp(18),dp(30));
-    column.setBackgroundColor(Color.rgb(15,23,37));
-    scroll.addView(column); setContentView(scroll);
-    column.addView(text("🛰 SATELLITE VISUAL",23,true));
-    column.addView(text("Simulation graphique pour LSPosed et Samsung One UI",13,false));
-    space(column,15);
-    preview=new Preview();
-    column.addView(preview,new LinearLayout.LayoutParams(-1,dp(90)));
-    space(column,8);
-    TextView warning=text("SIMULATION UNIQUEMENT : PAS DE RÉSEAU NI DE SOS RÉEL",12,true);
-    warning.setTextColor(Color.rgb(255,204,116)); column.addView(warning);
-    space(column,20);
-    Switch toggle=new Switch(this);
-    toggle.setText("Afficher l'indicateur simulé");
-    toggle.setTextColor(Color.WHITE); toggle.setTextSize(16); toggle.setChecked(cfg.enabled);
-    toggle.setOnCheckedChangeListener((button,checked)->{cfg.enabled=checked; save();});
-    column.addView(toggle);
-    space(column,18);
-    column.addView(text("Mode graphique",15,true));
-    Spinner modes=new Spinner(this);
-    modes.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,
-       new String[]{"Satellite NTN fictif","Satellite SOS fictif","Starlink fictif","Recherche fictive"}));
-    modes.setSelection(cfg.mode);
-    modes.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-      @Override public void onItemSelected(android.widget.AdapterView<?> a,View v,int pos,long id) { cfg.mode=pos; save(); }
-      @Override public void onNothingSelected(android.widget.AdapterView<?> a) {}
-    }); column.addView(modes);
-    space(column,14);
-    TextView levelText=text("Signal simulé : "+cfg.level+"/4",15,true);
-    column.addView(levelText);
-    SeekBar signal=new SeekBar(this); signal.setMax(4); signal.setProgress(cfg.level);
-    signal.setOnSeekBarChangeListener(change((int n)->{
-      cfg.level=n; levelText.setText("Signal simulé : "+n+"/4"); save();
-    })); column.addView(signal);
-    space(column,12);
-    TextView offsetText=text("Position : "+cfg.offset+" dp depuis la droite",15,true);
-    column.addView(offsetText);
-    SeekBar offset=new SeekBar(this); offset.setMax(250); offset.setProgress(cfg.offset);
-    offset.setOnSeekBarChangeListener(change((int n)->{
-      cfg.offset=n; offsetText.setText("Position : "+n+" dp depuis la droite"); save();
-    })); column.addView(offset);
-    space(column,13);
-    column.addView(text("Contraste",15,true));
-    Spinner tone=new Spinner(this);
-    tone.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,
-       new String[]{"Blanc (fond sombre)","Noir (fond clair)"}));
-    tone.setSelection(cfg.tone);
-    tone.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-      @Override public void onItemSelected(android.widget.AdapterView<?> a,View v,int pos,long id) { cfg.tone=pos; save(); }
-      @Override public void onNothingSelected(android.widget.AdapterView<?> a) {}
-    }); column.addView(tone);
-    space(column,15);
-    Button refresh=new Button(this); refresh.setText("ACTUALISER L'AFFICHAGE");
-    refresh.setOnClickListener(v->save()); column.addView(refresh);
-    space(column,10);
-    TextView help=text("Active le module dans LSPosed avec le périmètre « System UI », redémarre, puis active la simulation ici. En cas de problème, désactive LSPosed pour ce module et redémarre. Logs : SatelliteVisual.",13,false);
-    help.setTextColor(Color.rgb(175,195,218)); column.addView(help);
-  }
-  private interface IntChange { void changed(int n); }
-  private SeekBar.OnSeekBarChangeListener change(IntChange callback) {
-    return new SeekBar.OnSeekBarChangeListener() {
-      @Override public void onProgressChanged(SeekBar b,int n,boolean user) { if(user) callback.changed(n); }
-      @Override public void onStartTrackingTouch(SeekBar b) {}
-      @Override public void onStopTrackingTouch(SeekBar b) {}
-    };
-  }
-  private final class Preview extends View {
-    Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
-    Preview(){super(MainActivity.this);}
-    @Override protected void onDraw(Canvas c) {
-      p.setColor(cfg.tone==1?Color.rgb(230,238,248):Color.rgb(30,48,68));
-      c.drawRoundRect(0,0,getWidth(),getHeight(),dp(12),dp(12),p);
-      p.setColor(cfg.tone==1?Color.BLACK:Color.WHITE);
-      p.setTextSize(dp(12)); c.drawText("12:34",dp(12),dp(25),p);
-      c.drawText("APERÇU SIMULÉ",dp(12),dp(65),p);
-      SatellitePainter.draw(c,getWidth(),dp(44),getResources().getDisplayMetrics().density,cfg);
+    private VisualConfig cfg;
+    private TextView resourceInfo;
+
+    private int dp(int p) { return (int)(p * getResources().getDisplayMetrics().density + .5f); }
+
+    private TextView label(String value,int sp,boolean bold) {
+        TextView t = new TextView(this);
+        t.setText(value);
+        t.setTextSize(sp);
+        t.setTextColor(Color.WHITE);
+        if (bold) t.setTypeface(null,1);
+        return t;
     }
-  }
+
+    private void gap(LinearLayout container,int p) {
+        container.addView(new View(this),new LinearLayout.LayoutParams(-1,dp(p)));
+    }
+
+    private void broadcastChange() {
+        cfg.save(this);
+        Intent i = new Intent(VisualConfig.REFRESH);
+        i.setPackage("com.android.systemui");
+        sendBroadcast(i);
+    }
+
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state);
+        cfg = VisualConfig.read(this);
+        getWindow().setStatusBarColor(Color.rgb(11,20,34));
+        getWindow().setNavigationBarColor(Color.rgb(11,20,34));
+
+        ScrollView scroller = new ScrollView(this);
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setPadding(dp(22),dp(24),dp(22),dp(32));
+        page.setBackgroundColor(Color.rgb(11,20,34));
+        scroller.addView(page);
+        setContentView(scroller);
+
+        page.addView(label("SATELLITE NTN",27,true));
+        TextView kicker = label("SAMSUNG SYSTEMUI  •  NATIVE ICON TEST  •  V2",12,false);
+        kicker.setTextColor(Color.rgb(102,195,239));
+        page.addView(kicker);
+        gap(page,20);
+
+        TextView explanation = label(
+            "Cette version tente d'activer l'emplacement « satellite » du gestionnaire d'icônes natif Samsung. "
+            + "Elle ne dessine plus l'icône bricolée de la V1.",16,false);
+        explanation.setTextColor(Color.rgb(207,223,235));
+        page.addView(explanation);
+        gap(page,14);
+        TextView warning=label("SIMULATION VISUELLE UNIQUEMENT\nAUCUN ACCÈS RÉEL À STARLINK / T-SATELLITE / SOS",12,true);
+        warning.setTextColor(Color.rgb(255,193,108));
+        page.addView(warning);
+        gap(page,25);
+
+        Switch toggle=new Switch(this);
+        toggle.setText("Activer l'indicateur système simulé");
+        toggle.setTextSize(16);
+        toggle.setTextColor(Color.WHITE);
+        toggle.setChecked(cfg.enabled);
+        toggle.setOnCheckedChangeListener((v, enabled)->{
+            cfg.enabled=enabled;
+            broadcastChange();
+        });
+        page.addView(toggle);
+
+        gap(page,23);
+        page.addView(label("Profil (étiquette de simulation)",15,true));
+        Spinner modes=new Spinner(this);
+        String[] names = {
+            "Satellite NTN connecté (fictif)",
+            "Satellite SOS (fictif)",
+            "T-Satellite / Starlink (fictif)",
+            "Recherche de satellite (fictive)"
+        };
+        modes.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,names));
+        modes.setSelection(cfg.mode);
+        modes.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> v,View item,int idx,long id) {
+                if (cfg.mode != idx) {cfg.mode=idx;broadcastChange();}
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> v) {}
+        });
+        page.addView(modes);
+        gap(page,16);
+
+        TextView strength=label("Niveau graphique : "+cfg.level+" / 4",15,true);
+        page.addView(strength);
+        SeekBar slider=new SeekBar(this);
+        slider.setMax(4); slider.setProgress(cfg.level);
+        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar b,int progress,boolean fromUser) {
+                if (fromUser) {cfg.level=progress; strength.setText("Niveau graphique : "+progress+" / 4"); broadcastChange();}
+            }
+            @Override public void onStartTrackingTouch(SeekBar b) {}
+            @Override public void onStopTrackingTouch(SeekBar b) {}
+        });
+        page.addView(slider);
+        gap(page,20);
+
+        Button apply=new Button(this);
+        apply.setText("ACTUALISER SYSTEMUI");
+        apply.setOnClickListener(v->broadcastChange());
+        page.addView(apply);
+        gap(page,12);
+        resourceInfo=label("",13,false);
+        resourceInfo.setTextColor(Color.rgb(164,207,236));
+        page.addView(resourceInfo);
+        Button inspect=new Button(this);
+        inspect.setText("VÉRIFIER LES RESSOURCES SATELLITE");
+        inspect.setOnClickListener(v->inspectResources());
+        page.addView(inspect);
+        inspectResources();
+
+        gap(page,22);
+        TextView help=label(
+            "Installation : activer Satellite Visual dans LSPosed, périmètre System UI uniquement, "
+            + "puis redémarrer. Si aucun indicateur n'apparaît, ouvrir les journaux LSPosed et "
+            + "rechercher « SatelliteVisualNative ». Si SystemUI devient instable, désactiver le module et redémarrer. "
+            + "Les versions Samsung utilisent parfois une pipeline différente : l'affichage n'est pas garanti.",13,false);
+        help.setTextColor(Color.rgb(163,182,207));
+        page.addView(help);
+    }
+
+    private void inspectResources() {
+        try {
+            Resources r=getPackageManager().getResourcesForApplication("com.android.systemui");
+            String[] ids={"ic_satellite_connected_0","ic_satellite_connected_1",
+                    "ic_satellite_connected_2","ic_satellite_not_connected",
+                    "stat_sys_satellite_connected","stat_sys_satellite"};
+            StringBuilder found=new StringBuilder();
+            for(String name:ids) {
+                int id=r.getIdentifier(name,"drawable","com.android.systemui");
+                if(id!=0) found.append(name).append("\n");
+            }
+            if(found.length()==0) resourceInfo.setText("Ressources AOSP classiques introuvables. Un diagnostic des classes One UI est nécessaire.");
+            else resourceInfo.setText("Ressources satellites système détectées :\n"+found);
+        } catch(Exception e) {
+            resourceInfo.setText("Impossible de lire les ressources SystemUI depuis l'app : "+e.getClass().getSimpleName());
+        }
+    }
 }
